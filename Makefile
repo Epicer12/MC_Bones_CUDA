@@ -1,13 +1,22 @@
 # Standalone build for Colab T4 (sm_75) or other NVIDIA GPUs.
-# Usage: make [ARCH=sm_75] [run-t4]
+# Usage: bash setup_colab.sh && make run-t4
+#        make NVCC=/usr/local/cuda/bin/nvcc
 
 NVCC ?= nvcc
 ARCH ?= sm_75
 CXXFLAGS ?= -O3
 
-.PHONY: all clean run-small run-t4
+.PHONY: all clean run-small run-t4 check-nvcc
 
-all: loot56_cuda
+all: check-nvcc loot56_cuda
+
+check-nvcc:
+	@command -v $(NVCC) >/dev/null 2>&1 || { \
+		echo "ERROR: $(NVCC) not found."; \
+		echo "  Colab: bash setup_colab.sh   then   make"; \
+		echo "  Or:    make NVCC=/usr/local/cuda/bin/nvcc"; \
+		exit 127; \
+	}
 
 loot56_cuda: loot56_cuda.cu
 	$(NVCC) $(CXXFLAGS) -arch=$(ARCH) -o $@ $<

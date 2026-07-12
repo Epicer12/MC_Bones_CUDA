@@ -1,26 +1,31 @@
-# Paste into Colab cells (T4 GPU runtime required)
+# Colab cells — run in order (T4 GPU runtime required)
 
-# --- Cell 1: clone standalone repo ---
+# --- Cell 0: confirm GPU (must show Tesla T4, not "No devices") ---
 """
-!git clone https://github.com/YOUR_USER/loot56-cuda.git
-%cd loot56-cuda
 !nvidia-smi
 """
 
-# --- Cell 2: build + scan one chunk ---
+# --- Cell 1: clone + setup nvcc + build + scan ---
 """
-!make ARCH=sm_75
-!./loot56_cuda --loot-range 0 50000000000 --out loot56_hits.txt \
-    --grid-size 16384 --seeds-per-thread 128
+!git clone https://github.com/YOUR_USER/loot56-cuda.git
+%cd loot56-cuda
+!bash run_colab.sh
 """
 
-# --- Cell 3: download hits ---
+# --- Cell 2: download hits ---
 """
 from google.colab import files
 files.download('loot56_hits.txt')
 """
 
-# Full 2^48 in four Colab sessions (use --append on sessions 2-4):
+# If you already cloned and only need to fix nvcc:
+"""
+%cd loot56-cuda
+!bash setup_colab.sh
+!make ARCH=sm_75 run-t4
+"""
+
+# Full 2^48 in four sessions (use --append on sessions 2-4):
 #   0 .. 70368744177664
 #   70368744177664 .. 140737488355328
 #   140737488355328 .. 211106232532992

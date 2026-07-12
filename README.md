@@ -6,23 +6,32 @@ No cubiomes, no Java, no parent repo required — clone **this folder only** and
 
 ## Quick start (Colab T4)
 
-1. **Runtime → Change runtime type → T4 GPU**
-2. Clone or upload this folder
-3. Run:
+**Step 0 — enable GPU** (required): **Runtime → Change runtime type → T4 GPU → Save**
 
-```bash
-!git clone <your-repo-url> loot56-cuda   # or upload zip
+Then clone and run:
+
+```python
+!git clone <your-repo-url> loot56-cuda
 %cd loot56-cuda
 !bash run_colab.sh
 ```
 
-Or in one cell:
+`run_colab.sh` installs `nvcc` automatically if Colab does not have it on PATH (~2 min, once per session).
+
+Manual build:
 
 ```python
+!bash setup_colab.sh
 !make ARCH=sm_75 run-t4
 ```
 
 Download `loot56_hits.txt` when done.
+
+### Troubleshooting `nvcc: No such file or directory`
+
+1. **Switch to GPU runtime** — CPU runtime has no CUDA at all.
+2. Run `!bash setup_colab.sh` before `make` (installs `nvidia-cuda-toolkit`).
+3. Or pass nvcc explicitly: `!make NVCC=/usr/lib/nvidia-cuda-toolkit/bin/nvcc`
 
 ## Build
 
@@ -88,6 +97,7 @@ Then on Colab: `!git clone <your-github-url> && %cd loot56-cuda`
 | File | Purpose |
 |------|---------|
 | `loot56_cuda.cu` | CUDA kernel + CLI |
+| `setup_colab.sh` | Find/install nvcc on Colab |
 | `Makefile` | Build targets |
-| `run_colab.sh` | One-shot Colab script |
+| `run_colab.sh` | Setup + build + scan |
 | `colab_cells.py` | Copy-paste Colab snippets |

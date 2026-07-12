@@ -1,0 +1,5 @@
+loot56_cuda
+*.o
+loot56_hits.txt
+loot56_cuda_hits.txt
+*.txt.bak

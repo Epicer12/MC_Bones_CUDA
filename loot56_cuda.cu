@@ -24,6 +24,27 @@
 #include <string.h>
 #include <time.h>
 
+#ifdef _WIN32
+#include <windows.h>
+static double now_seconds(void)
+{
+    FILETIME ft;
+    ULARGE_INTEGER uli;
+    GetSystemTimeAsFileTime(&ft);
+    uli.LowPart = ft.dwLowDateTime;
+    uli.HighPart = ft.dwHighDateTime;
+    return (uli.QuadPart / 10000000.0) - 11644473600.0;
+}
+#else
+#include <sys/time.h>
+static double now_seconds(void)
+{
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    return (double)tv.tv_sec + (double)tv.tv_usec / 1e6;
+}
+#endif
+
 static const int POOL1_TOTAL = 232;
 static const int POOL1_BONE_MIN = 50;
 static const int POOL1_BONE_MAX = 74;
@@ -113,17 +134,14 @@ __global__ void scan_loot56_kernel(
     uint64_t *hit_seeds,
     int max_hits)
 {
-    const uint64_t grid_stride =
-        (uint64_t)blockDim.x * (uint64_t)gridDim.x * (uint64_t)seeds_per_thread;
-    const uint64_t thread_base =
-        range_lo
-        + (uint64_t)blockIdx.x * (uint64_t)blockDim.x * (uint64_t)seeds_per_thread
-        + (uint64_t)threadIdx.x * (uint64_t)seeds_per_thread;
+    const uint64_t global_id =
+        (uint64_t)blockIdx.x * (uint64_t)blockDim.x + (uint64_t)threadIdx.x;
+    const uint64_t thread_base = range_lo + global_id * (uint64_t)seeds_per_thread;
 
     unsigned long long local_checked = 0;
 
     for (int i = 0; i < seeds_per_thread; i++) {
-        uint64_t seed = thread_base + (uint64_t)i * grid_stride;
+        uint64_t seed = thread_base + (uint64_t)i;
         if (seed >= range_hi)
             break;
 
@@ -266,19 +284,23 @@ int main(int argc, char **argv)
     unsigned long long h_checked_total = 0;
     int total_hits_written = 0;
     int first_write = !append_mode;
-    time_t start = time(NULL);
-    time_t last_report = start;
+    double start = now_seconds();
+    double last_report = start;
+
+    const uint64_t total_span = range_hi - range_lo;
 
     fprintf(stderr,
-        "[cuda] scanning [%" PRIu64 ", %" PRIu64 ")  batch=%" PRIu64
-        "  launch=%" PRIu64 " seeds  block=%d grid=%d spt=%d\n",
-        range_lo, range_hi, batch_size, launch_seeds,
+        "[cuda] scanning [%" PRIu64 ", %" PRIu64 ") = %" PRIu64 " seeds"
+        "  batch=%" PRIu64 "  launch=%" PRIu64 "  block=%d grid=%d spt=%d\n",
+        range_lo, range_hi, total_span, batch_size, launch_seeds,
         block_size, grid_size, seeds_per_thread);
 
     for (uint64_t batch_lo = range_lo; batch_lo < range_hi; ) {
         uint64_t batch_hi = batch_lo + batch_size;
         if (batch_hi > range_hi)
             batch_hi = range_hi;
+
+        const uint64_t batch_span = batch_hi - batch_lo;
 
         CUDA_CHECK(cudaMemset(d_checked, 0, sizeof(unsigned long long)));
         CUDA_CHECK(cudaMemset(d_hit_count, 0, sizeof(int)));
@@ -296,6 +318,12 @@ int main(int argc, char **argv)
         CUDA_CHECK(cudaMemcpy(&batch_hits, d_hit_count, sizeof(int), cudaMemcpyDeviceToHost));
 
         h_checked_total += batch_checked;
+
+        if (batch_checked != batch_span) {
+            fprintf(stderr,
+                "[cuda] warning: batch checked %llu != expected %" PRIu64 "\n",
+                batch_checked, batch_span);
+        }
 
         int hits_to_copy = batch_hits;
         if (hits_to_copy > MAX_HITS)
@@ -331,13 +359,13 @@ int main(int argc, char **argv)
 
         batch_lo = batch_hi;
 
-        time_t now = time(NULL);
-        if (difftime(now, last_report) >= 30.0 || batch_lo >= range_hi) {
-            double elapsed = difftime(now, start);
+        double now = now_seconds();
+        if (now - last_report >= 30.0 || batch_lo >= range_hi) {
+            double elapsed = now - start;
             double rate = elapsed > 0 ? (double)h_checked_total / elapsed : 0.0;
-            double pct = 100.0 * (double)(batch_lo - range_lo) / (double)(range_hi - range_lo);
+            double pct = 100.0 * (double)(batch_lo - range_lo) / (double)total_span;
             fprintf(stderr,
-                "[cuda] progress %.2f%%  checked=%llu  rate=%.0f/s  hits=%d  elapsed=%.0fs\n",
+                "[cuda] progress %.2f%%  checked=%llu  rate=%.0f/s  hits=%d  elapsed=%.1fs\n",
                 pct,
                 h_checked_total,
                 rate,
@@ -347,13 +375,14 @@ int main(int argc, char **argv)
         }
     }
 
-    time_t end = time(NULL);
-    double elapsed = difftime(end, start);
+    double end = now_seconds();
+    double elapsed = end - start;
     double rate = elapsed > 0 ? (double)h_checked_total / elapsed : 0.0;
 
     fprintf(stderr,
-        "[cuda] done  checked=%llu  hits=%d  rate=%.0f/s  elapsed=%.0fs  out=%s\n",
+        "[cuda] done  checked=%llu / %" PRIu64 "  hits=%d  rate=%.0f/s  elapsed=%.1fs  out=%s\n",
         h_checked_total,
+        total_span,
         total_hits_written,
         rate,
         elapsed,

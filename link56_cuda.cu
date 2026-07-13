@@ -15,8 +15,6 @@
  *   ./link56_cuda --loot-file loot56_hits.txt --struct-range 20000000000 80000000000
  */
 
-#include "link56_rng.cuh"
-
 #include <cuda_runtime.h>
 
 #include <inttypes.h>
@@ -24,6 +22,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+
+#include "link56_rng.cuh"
 
 #ifdef _WIN32
 #include <windows.h>

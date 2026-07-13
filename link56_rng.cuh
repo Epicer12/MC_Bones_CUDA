@@ -1,24 +1,26 @@
 #ifndef LINK56_RNG_CUH
 #define LINK56_RNG_CUH
 
+#include <stdint.h>
+
 /* MC 1.17.1 Java Random + desert pyramid placement (matches cubiomes finders.h). */
 
 #define LINK56_K 0x5deece66dULL
 #define LINK56_M 0xffffffffffffULL
 #define LINK56_B 0xbULL
 
-__device__ __forceinline__ void l56_set_seed(uint64_t *s, uint64_t v)
+static __device__ __forceinline__ void l56_set_seed(uint64_t *s, uint64_t v)
 {
     *s = (v ^ LINK56_K) & LINK56_M;
 }
 
-__device__ __forceinline__ int l56_next(uint64_t *s, int bits)
+static __device__ __forceinline__ int l56_next(uint64_t *s, int bits)
 {
     *s = (*s * LINK56_K + LINK56_B) & LINK56_M;
     return (int)((int64_t)*s >> (48 - bits));
 }
 
-__device__ __forceinline__ int l56_next_int(uint64_t *s, int n)
+static __device__ __forceinline__ int l56_next_int(uint64_t *s, int n)
 {
     const int m = n - 1;
     int bits, val;
@@ -33,12 +35,12 @@ __device__ __forceinline__ int l56_next_int(uint64_t *s, int n)
     return val;
 }
 
-__device__ __forceinline__ uint64_t l56_next_long(uint64_t *s)
+static __device__ __forceinline__ uint64_t l56_next_long(uint64_t *s)
 {
     return ((uint64_t)l56_next(s, 32) << 32) + (uint64_t)l56_next(s, 32);
 }
 
-__device__ __forceinline__ uint64_t l56_population_seed(uint64_t ws, int x, int z)
+static __device__ __forceinline__ uint64_t l56_population_seed(uint64_t ws, int x, int z)
 {
     uint64_t s;
     l56_set_seed(&s, ws);
@@ -50,7 +52,7 @@ __device__ __forceinline__ uint64_t l56_population_seed(uint64_t ws, int x, int 
 }
 
 /* Desert pyramid: salt=14357617, regionSize=32, chunkRange=24 (power of 2). */
-__device__ __forceinline__ void l56_desert_pyramid_pos(
+static __device__ __forceinline__ void l56_desert_pyramid_pos(
     uint64_t seed, int reg_x, int reg_z, int *block_x, int *block_z)
 {
     const uint64_t salt = 14357617ULL;
@@ -71,7 +73,7 @@ __device__ __forceinline__ void l56_desert_pyramid_pos(
 }
 
 /* Returns 4 loot table seeds (decorator salt 40003 for MC 1.17.1 desert pyramid). */
-__device__ __forceinline__ void l56_desert_loot_seeds(
+static __device__ __forceinline__ void l56_desert_loot_seeds(
     uint64_t structure_seed, int block_x, int block_z, uint64_t out[4])
 {
     int min_x = block_x & ~15;

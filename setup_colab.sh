@@ -50,5 +50,15 @@ fi
 export NVCC="$NVCC_PATH"
 export PATH="$(dirname "$NVCC"):$PATH"
 
+# cubiomes for struct56_cuda CPU verify (from parent repo or ./cubiomes symlink)
+if [ -d "../native/cubiomes" ]; then
+    export CUBIOMES="../native/cubiomes"
+elif [ -d "cubiomes" ]; then
+    export CUBIOMES="cubiomes"
+else
+    echo "WARNING: cubiomes not found — struct56_cuda needs ../native/cubiomes"
+    echo "  Clone full Seed_Finding repo, or: ln -s /path/to/native/cubiomes cubiomes"
+fi
+
 echo "GPU: $(nvidia-smi --query-gpu=name --format=csv,noheader | head -1)"
 echo "NVCC: $NVCC ($($NVCC --version | tail -1))"

@@ -1,12 +1,16 @@
 # Standalone build for Colab T4 (sm_75) or other NVIDIA GPUs.
-# Usage: bash setup_colab.sh && make run-t4
+# Usage: bash setup_colab.sh && make run-struct
 #        make NVCC=/usr/local/cuda/bin/nvcc
 
 NVCC ?= nvcc
+CC ?= gcc
 ARCH ?= sm_75
 CXXFLAGS ?= -O3
+CUBIOMES ?= ../native/cubiomes
+CUBIOMES_BUILD ?= $(CUBIOMES)/build-loot56
+CUBIOMES_LIB ?= $(CUBIOMES_BUILD)/libcubiomes_static.a
 
-.PHONY: all clean run-small run-t4 run-link check-nvcc
+.PHONY: all clean run-small run-t4 run-link run-struct check-nvcc cubiomes-lib
 
 all: check-nvcc loot56_cuda link56_cuda struct56_cuda
 
@@ -18,17 +22,30 @@ check-nvcc:
 		exit 127; \
 	}
 
+$(CUBIOMES_LIB):
+	@test -f "$(CUBIOMES)/finders.h" || { \
+		echo "ERROR: cubiomes not found at $(CUBIOMES)"; \
+		echo "  Clone full Seed_Finding repo, or symlink: ln -s ../native/cubiomes cubiomes"; \
+		exit 1; \
+	}
+	mkdir -p "$(CUBIOMES_BUILD)"
+	cd "$(CUBIOMES_BUILD)" && cmake .. -DCMAKE_BUILD_TYPE=Release && cmake --build . --target cubiomes_static
+
+struct56_verify.o: struct56_verify.c struct56_verify.h
+	$(CC) $(CXXFLAGS) -I"$(CUBIOMES)" -c -o $@ struct56_verify.c
+
 loot56_cuda: loot56_cuda.cu
 	$(NVCC) $(CXXFLAGS) -arch=$(ARCH) -o $@ $<
 
 link56_cuda: link56_cuda.cu link56_rng.cuh
 	$(NVCC) $(CXXFLAGS) -arch=$(ARCH) -o $@ link56_cuda.cu
 
-struct56_cuda: struct56_cuda.cu link56_rng.cuh
-	$(NVCC) $(CXXFLAGS) -arch=$(ARCH) -o $@ struct56_cuda.cu
+struct56_cuda: struct56_cuda.cu link56_rng.cuh struct56_verify.o struct56_verify.h $(CUBIOMES_LIB)
+	$(NVCC) $(CXXFLAGS) -arch=$(ARCH) -I"$(CUBIOMES)" -o $@ struct56_cuda.cu struct56_verify.o "$(CUBIOMES_LIB)" -lm
 
 clean:
-	rm -f loot56_cuda link56_cuda struct56_cuda loot56_cuda_hits.txt link56_hits.txt struct56_hits.txt struct56_mitm.txt
+	rm -f loot56_cuda link56_cuda struct56_cuda struct56_verify.o
+	rm -f loot56_cuda_hits.txt link56_hits.txt struct56_hits.txt struct56_mitm.txt
 
 run-small: loot56_cuda
 	./loot56_cuda --loot-range 0 50000000000 --out loot56_hits.txt

@@ -61,7 +61,8 @@ static __device__ __forceinline__ void l56_desert_pyramid_pos(
 
     uint64_t s = seed + (uint64_t)reg_x * 341873128712ULL
         + (uint64_t)reg_z * 132897987541ULL + salt;
-    s = (s ^ LINK56_K) & LINK56_M;
+    /* Match cubiomes finders.h getFeatureChunkInRegion (MC 1.17.1). */
+    s = (s ^ LINK56_K);
     s = (s * LINK56_K + LINK56_B) & LINK56_M;
 
     int cx = (int)((chunk_range * (s >> 17)) >> 31);

@@ -8,12 +8,15 @@ No cubiomes, no Java, no parent repo required — clone **this folder only** and
 
 **Step 0 — enable GPU** (required): **Runtime → Change runtime type → T4 GPU → Save**
 
-### Option C — structure-first brute (recommended after link failed)
+### Option C — structure-first brute (recommended)
 
-**`struct56_cuda`** scans structure seeds directly (like `loot56_cuda` speed), places a pyramid in **region (0,0)**, runs **fast56** on all 4 chests, then optional **sister-seed MITM** on CPU.
+**`struct56_cuda`** GPU-scans structure seeds with **fast56**, then **cubiomes CPU verify** (placement + full loot table). Optional **`--mitm`** runs cubiomes sister-seed + desert biome pass.
+
+**Requires cubiomes** (from parent repo `../native/cubiomes`, or symlink `cubiomes` in this folder).
 
 ```python
-%cd loot56-cuda
+# Clone full Seed_Finding repo so loot56-cuda/../native/cubiomes exists
+%cd Seed_Finding/loot56-cuda
 !bash setup_colab.sh
 !bash run_colab_struct.sh
 ```
@@ -27,8 +30,8 @@ Custom range:
 ```
 
 Outputs:
-- `struct56_hits.txt` — structureSeed + lootTableSeed + pos
-- `struct56_mitm.txt` — worldSeed candidates (loot re-check only; **biome still needs PC**)
+- `struct56_hits.txt` — **cubiomes-verified** structure hits only
+- `struct56_mitm.txt` — biome-valid **world seeds** (playable candidates)
 
 Chunk across Colab sessions (`--append` on session 2+):
 

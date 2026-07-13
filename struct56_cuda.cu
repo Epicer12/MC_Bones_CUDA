@@ -5,8 +5,8 @@
  * for each structureSeed in [LO, HI), place pyramid in region (RX,RZ), compute 4
  * chest loot seeds, apply fast56 filter.
  *
- * Optional --mitm: CPU sister-seed pass (4096 upper bits) re-checks loot at the
- * hit position. Biome validation still needs desert_pyramid_brute on your PC.
+ * Optional --mitm: cubiomes sister-seed + desert biome pass on verified hits.
+ * GPU hits are filtered with cubiomes placement + full loot table (--no-verify to skip).
  *
  * Build:  make struct56_cuda
  * Run:    ./struct56_cuda --struct-range 160000000000 281474976710656 --region 0 0
@@ -21,6 +21,7 @@
 #include <time.h>
 
 #include "link56_rng.cuh"
+#include "struct56_verify.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -42,16 +43,6 @@ static double now_seconds(void)
     return (double)tv.tv_sec + (double)tv.tv_usec / 1e6;
 }
 #endif
-
-typedef struct {
-    uint64_t structure_seed;
-    uint64_t loot_seed;
-    int reg_x;
-    int reg_z;
-    int chest;
-    int block_x;
-    int block_z;
-} StructHit;
 
 static const uint64_t MASK48 = 0xffffffffffffULL;
 static const uint64_t SEED48_MAX = 1ULL << 48;
@@ -126,96 +117,9 @@ __global__ void scan_struct56_kernel(
         atomicAdd(checked, local_checked);
 }
 
-/* ---------- host RNG (sister MITM, mirrors link56_rng.cuh) ---------- */
+/* ---------- cubiomes verify + MITM (struct56_verify.c) ---------- */
 
-static void host_set_seed(uint64_t *s, uint64_t v)
-{
-    *s = (v ^ LINK56_K) & LINK56_M;
-}
-
-static int host_next(uint64_t *s, int bits)
-{
-    *s = (*s * LINK56_K + LINK56_B) & LINK56_M;
-    return (int)((int64_t)*s >> (48 - bits));
-}
-
-static int host_next_int(uint64_t *s, int n)
-{
-    const int m = n - 1;
-    int bits, val;
-    if ((m & n) == 0) {
-        uint64_t x = (uint64_t)n * (uint64_t)host_next(s, 31);
-        return (int)((int64_t)x >> 31);
-    }
-    do {
-        bits = host_next(s, 31);
-        val = bits % n;
-    } while ((int32_t)((uint32_t)bits - (uint32_t)val + (uint32_t)m) < 0);
-    return val;
-}
-
-static uint64_t host_next_long(uint64_t *s)
-{
-    return ((uint64_t)host_next(s, 32) << 32) + (uint64_t)host_next(s, 32);
-}
-
-static uint64_t host_population_seed(uint64_t ws, int x, int z)
-{
-    uint64_t s;
-    host_set_seed(&s, ws);
-    uint64_t a = host_next_long(&s);
-    uint64_t b = host_next_long(&s);
-    a |= 1ULL;
-    b |= 1ULL;
-    return ((uint64_t)x * a + (uint64_t)z * b) ^ ws;
-}
-
-static void host_desert_loot_seeds(uint64_t ws, int block_x, int block_z, uint64_t out[4])
-{
-    int min_x = block_x & ~15;
-    int min_z = block_z & ~15;
-    uint64_t pop = host_population_seed(ws, min_x, min_z);
-    uint64_t s;
-    host_set_seed(&s, pop + 40003ULL);
-    for (int i = 0; i < 4; i++)
-        out[i] = host_next_long(&s);
-}
-
-static int host_fast_rng_56_bones(uint64_t loot_table_seed)
-{
-    const int POOL1_TOTAL = 232;
-    const int POOL1_BONE_MIN = 50;
-    const int POOL1_BONE_MAX = 74;
-    const int POOL2_TOTAL = 50;
-    const int POOL2_BONE_MIN = 0;
-    const int POOL2_BONE_MAX = 9;
-
-    uint64_t s;
-    host_set_seed(&s, loot_table_seed);
-
-    if (host_next_int(&s, 3) != 2)
-        return 0;
-
-    for (int i = 0; i < 4; i++) {
-        int w = host_next_int(&s, POOL1_TOTAL);
-        if (w < POOL1_BONE_MIN || w > POOL1_BONE_MAX)
-            return 0;
-        if (host_next_int(&s, 3) != 2)
-            return 0;
-    }
-
-    for (int i = 0; i < 4; i++) {
-        int w = host_next_int(&s, POOL2_TOTAL);
-        if (w < POOL2_BONE_MIN || w > POOL2_BONE_MAX)
-            return 0;
-        if (host_next_int(&s, 8) != 7)
-            return 0;
-    }
-
-    return 1;
-}
-
-static int run_sister_mitm(
+static int run_mitm_output(
     const StructHit *hits, int hit_count, int sister_tries,
     const char *mitm_out, int append_mode)
 {
@@ -224,54 +128,9 @@ static int run_sister_mitm(
         perror(mitm_out);
         return 0;
     }
-
-    if (!append_mode) {
-        fprintf(fp,
-            "# struct56_cuda sister-seed MITM (loot re-check only, no biome)\n"
-            "# Run desert_pyramid_brute on PC for biome-valid world seeds\n");
-    }
-
-    int world_hits = 0;
-
-    for (int h = 0; h < hit_count; h++) {
-        const StructHit *hit = &hits[h];
-        const uint64_t lower48 = hit->structure_seed & MASK48;
-        int found = 0;
-
-        fprintf(stderr,
-            "[mitm] hit %d/%d structureSeed=%" PRIu64 " chest=%d pos=(%d,%d)\n",
-            h + 1, hit_count, hit->structure_seed, hit->chest,
-            hit->block_x, hit->block_z);
-
-        for (int upper = 0; upper < sister_tries; upper++) {
-            const uint64_t ws = lower48 | ((uint64_t)upper << 48);
-            uint64_t loot[4];
-            host_desert_loot_seeds(ws, hit->block_x, hit->block_z, loot);
-
-            if (loot[hit->chest] != hit->loot_seed)
-                continue;
-            if (!host_fast_rng_56_bones(loot[hit->chest]))
-                continue;
-
-            fprintf(fp,
-                "worldSeed=%" PRIu64 " structureSeed=%" PRIu64
-                " lootTableSeed=%" PRIu64 " chest=%d region=(%d,%d)"
-                " pos=(%d,%d) /tp %d 90 %d\n",
-                ws, hit->structure_seed, hit->loot_seed,
-                hit->chest, hit->reg_x, hit->reg_z,
-                hit->block_x, hit->block_z,
-                hit->block_x, hit->block_z);
-            fprintf(stderr, "[mitm]   worldSeed=%" PRIu64 "\n", ws);
-            world_hits++;
-            found = 1;
-        }
-
-        if (!found)
-            fprintf(stderr, "[mitm]   no sister match in %d tries\n", sister_tries);
-    }
-
+    const int n = struct56_mitm_cubiomes(hits, hit_count, sister_tries, fp, append_mode);
     fclose(fp);
-    fprintf(stderr, "[mitm] %d loot-valid world candidates -> %s\n", world_hits, mitm_out);
+    fprintf(stderr, "[mitm] %d world candidates -> %s\n", n, mitm_out);
     return 1;
 }
 
@@ -285,9 +144,10 @@ static void print_usage(const char *prog)
         "Options:\n"
         "  --region RX RZ         structure region (default: 0 0)\n"
         "  --out PATH             structure hits (default: struct56_hits.txt)\n"
-        "  --mitm                 sister-seed MITM on CPU after GPU scan\n"
+        "  --mitm                 cubiomes sister-seed + biome pass (after verify)\n"
         "  --mitm-out PATH        world candidates (default: struct56_mitm.txt)\n"
-        "  --sister-tries N       upper-16-bit tries (default: %d)\n"
+        "  --sister-tries N       upper-16-bit tries (default: %d, max 65536)\n"
+        "  --no-verify            skip cubiomes placement+loot filter (debug only)\n"
         "  --batch-size N         seeds per GPU launch (default: %llu)\n"
         "  --block-size N         CUDA block size (default: %d)\n"
         "  --grid-size N          CUDA grid size (default: %d)\n"
@@ -359,6 +219,7 @@ int main(int argc, char **argv)
     const char *out_path = "struct56_hits.txt";
     const char *mitm_out_path = "struct56_mitm.txt";
     int do_mitm = 0;
+    int do_verify = 1;
     int sister_tries = DEFAULT_SISTER_TRIES;
     uint64_t batch_size = DEFAULT_BATCH_SEEDS;
     int block_size = DEFAULT_BLOCK_SIZE;
@@ -391,6 +252,8 @@ int main(int argc, char **argv)
             grid_size = atoi(argv[++i]);
         } else if (!strcmp(argv[i], "--seeds-per-thread") && i + 1 < argc) {
             seeds_per_thread = atoi(argv[++i]);
+        } else if (!strcmp(argv[i], "--no-verify")) {
+            do_verify = 0;
         } else if (!strcmp(argv[i], "--append")) {
             append_mode = 1;
         } else if (!strcmp(argv[i], "--device") && i + 1 < argc) {
@@ -444,7 +307,6 @@ int main(int argc, char **argv)
 
     unsigned long long checked_total = 0;
     int total_hits = 0;
-    int first_write = !append_mode;
     double start = now_seconds();
     double last_report = start;
     const uint64_t total_span = range_hi - range_lo;
@@ -486,18 +348,10 @@ int main(int argc, char **argv)
                 all_hits + total_hits, d_hits, (size_t)copy_n * sizeof(StructHit),
                 cudaMemcpyDeviceToHost));
 
-            if (!write_struct_hits(
-                    out_path, all_hits + total_hits, copy_n, !first_write,
-                    range_lo, range_hi, reg_x, reg_z)) {
-                free(all_hits);
-                return 1;
-            }
-            first_write = 0;
-
             for (int i = 0; i < copy_n; i++) {
                 const StructHit *hit = &all_hits[total_hits + i];
                 fprintf(stderr,
-                    "[HIT] structureSeed=%" PRIu64 " lootTableSeed=%" PRIu64
+                    "[gpu-hit] structureSeed=%" PRIu64 " lootTableSeed=%" PRIu64
                     " chest=%d pos=(%d,%d)\n",
                     hit->structure_seed, hit->loot_seed,
                     hit->chest, hit->block_x, hit->block_z);
@@ -537,12 +391,61 @@ int main(int argc, char **argv)
     if (total_hits == 0)
         fprintf(stderr, "[struct] no 56-bone structure hits in this range\n");
 
-    if (do_mitm && total_hits > 0) {
-        if (!run_sister_mitm(all_hits, total_hits, sister_tries, mitm_out_path, append_mode))
+    StructHit *verified = all_hits;
+    int verified_count = total_hits;
+
+    if (do_verify && total_hits > 0) {
+        StructHit *vbuf = (StructHit *)calloc((size_t)MAX_HITS, sizeof(StructHit));
+        if (!vbuf) {
+            fprintf(stderr, "calloc failed\n");
+            free(all_hits);
+            return 1;
+        }
+        verified_count = struct56_filter_verified(all_hits, total_hits, vbuf, MAX_HITS);
+        verified = vbuf;
+
+        if (verified_count > 0) {
+            if (!write_struct_hits(
+                    out_path, verified, verified_count, append_mode,
+                    range_lo, range_hi, reg_x, reg_z)) {
+                free(vbuf);
+                free(all_hits);
+                return 1;
+            }
+        } else if (!append_mode) {
+            FILE *fp = fopen(out_path, "w");
+            if (fp) {
+                time_t t0 = time(NULL);
+                fprintf(fp,
+                    "# struct56_cuda: all GPU hits rejected by cubiomes verify\n"
+                    "# started %s", ctime(&t0));
+                fclose(fp);
+            }
+        }
+
+        if (verified_count == 0) {
+            fprintf(stderr,
+                "[verify] all %d GPU hits rejected (phantom fast56 / bad placement)\n",
+                total_hits);
+        }
+    } else if (total_hits > 0) {
+        if (!write_struct_hits(
+                out_path, all_hits, total_hits, append_mode,
+                range_lo, range_hi, reg_x, reg_z)) {
+            free(all_hits);
+            return 1;
+        }
+    }
+
+    if (do_mitm && verified_count > 0) {
+        if (!run_mitm_output(verified, verified_count, sister_tries, mitm_out_path, append_mode))
             fprintf(stderr, "[mitm] failed\n");
     } else if (do_mitm) {
-        fprintf(stderr, "[mitm] skipped (no structure hits)\n");
+        fprintf(stderr, "[mitm] skipped (no verified hits)\n");
     }
+
+    if (do_verify && verified != all_hits)
+        free(verified);
 
     free(all_hits);
     cudaFree(d_checked);

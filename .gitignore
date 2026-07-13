@@ -1,6 +1,8 @@
 loot56_cuda
 link56_cuda
 struct56_cuda
+struct56_verify.o
+cubiomes/
 *.o
 loot56_cuda_hits.txt
 link56_hits.txt

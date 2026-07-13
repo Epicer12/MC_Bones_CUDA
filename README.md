@@ -4,6 +4,8 @@ Standalone GPU scanner for **exact 56-bone, bones-only** desert pyramid chest lo
 
 No cubiomes, no Java, no parent repo required — clone **this folder only** and run on Colab or any Linux machine with NVIDIA CUDA.
 
+`setup_colab.sh` **auto-downloads cubiomes** on first run (Colab only needs the `loot56-cuda` folder).
+
 ## Quick start (Colab T4)
 
 **Step 0 — enable GPU** (required): **Runtime → Change runtime type → T4 GPU → Save**
@@ -12,11 +14,10 @@ No cubiomes, no Java, no parent repo required — clone **this folder only** and
 
 **`struct56_cuda`** GPU-scans structure seeds with **fast56**, then **cubiomes CPU verify** (placement + full loot table). Optional **`--mitm`** runs cubiomes sister-seed + desert biome pass.
 
-**Requires cubiomes** (from parent repo `../native/cubiomes`, or symlink `cubiomes` in this folder).
+**Requires cubiomes** — fetched automatically by `setup_colab.sh` on Colab.
 
 ```python
-# Clone full Seed_Finding repo so loot56-cuda/../native/cubiomes exists
-%cd Seed_Finding/loot56-cuda
+%cd loot56-cuda
 !bash setup_colab.sh
 !bash run_colab_struct.sh
 ```

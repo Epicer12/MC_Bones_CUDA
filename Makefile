@@ -6,7 +6,7 @@ NVCC ?= nvcc
 CC ?= gcc
 ARCH ?= sm_75
 CXXFLAGS ?= -O3
-CUBIOMES ?= ../native/cubiomes
+CUBIOMES ?= cubiomes
 CUBIOMES_BUILD ?= $(CUBIOMES)/build-loot56
 CUBIOMES_LIB ?= $(CUBIOMES_BUILD)/libcubiomes_static.a
 
@@ -25,7 +25,7 @@ check-nvcc:
 $(CUBIOMES_LIB):
 	@test -f "$(CUBIOMES)/finders.h" || { \
 		echo "ERROR: cubiomes not found at $(CUBIOMES)"; \
-		echo "  Clone full Seed_Finding repo, or symlink: ln -s ../native/cubiomes cubiomes"; \
+		echo "  Colab: bash setup_colab.sh   (auto-clones cubiomes)"; \
 		exit 1; \
 	}
 	mkdir -p "$(CUBIOMES_BUILD)"

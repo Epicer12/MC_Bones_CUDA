@@ -15,7 +15,7 @@ REG_Z="${4:-0}"
 
 echo ""
 echo "=== Building struct56_cuda (T4 / sm_75) ==="
-make ARCH=sm_75 NVCC="$NVCC" struct56_cuda
+make ARCH=sm_75 NVCC="$NVCC" CUBIOMES="$CUBIOMES" struct56_cuda
 
 echo ""
 echo "=== Structure scan [$STRUCT_LO, $STRUCT_HI) region=($REG_X,$REG_Z) + MITM ==="

@@ -50,15 +50,23 @@ fi
 export NVCC="$NVCC_PATH"
 export PATH="$(dirname "$NVCC"):$PATH"
 
-# cubiomes for struct56_cuda CPU verify (from parent repo or ./cubiomes symlink)
-if [ -d "../native/cubiomes" ]; then
-    export CUBIOMES="../native/cubiomes"
-elif [ -d "cubiomes" ]; then
-    export CUBIOMES="cubiomes"
-else
-    echo "WARNING: cubiomes not found — struct56_cuda needs ../native/cubiomes"
-    echo "  Clone full Seed_Finding repo, or: ln -s /path/to/native/cubiomes cubiomes"
-fi
+# cubiomes: auto-fetch on Colab (loot56-cuda-only clone is fine)
+ensure_cubiomes() {
+    if [ -f "../native/cubiomes/finders.h" ]; then
+        export CUBIOMES="../native/cubiomes"
+    elif [ -f "cubiomes/finders.h" ]; then
+        export CUBIOMES="cubiomes"
+    else
+        echo "Fetching cubiomes (one-time per Colab session, ~30s)..."
+        export DEBIAN_FRONTEND=noninteractive
+        apt-get update -qq
+        apt-get install -y -qq cmake build-essential git
+        git clone --depth 1 https://github.com/Cubitect/cubiomes.git cubiomes
+        export CUBIOMES="cubiomes"
+    fi
+    echo "CUBIOMES: $CUBIOMES"
+}
+ensure_cubiomes
 
 echo "GPU: $(nvidia-smi --query-gpu=name --format=csv,noheader | head -1)"
 echo "NVCC: $NVCC ($($NVCC --version | tail -1))"

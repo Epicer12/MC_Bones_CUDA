@@ -1,11 +1,6 @@
-loot56_cuda
-link56_cuda
-struct56_cuda
-struct56_verify.o
+desert_pyramid_brute
 cubiomes/
 *.o
-loot56_cuda_hits.txt
-link56_hits.txt
-struct56_hits.txt
-struct56_mitm.txt
+brute_out.txt
+brute_progress.txt
 *.txt.bak

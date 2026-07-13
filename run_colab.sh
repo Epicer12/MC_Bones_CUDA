@@ -1,5 +1,10 @@
 #!/bin/bash
-# Build and run on Colab T4. Usage: bash run_colab.sh [LO] [HI] [OUT]
+# CPU brute on Colab — real world seeds (cubiomes placement + loot + biome).
+# Usage: bash run_colab.sh [STRUCT_LO] [STRUCT_HI] [REGIONS]
+#
+# Example chunks (change LO each session):
+#   bash run_colab.sh 0 5000000000 4
+#   bash run_colab.sh 5000000000 10000000000 4
 set -euo pipefail
 
 cd "$(dirname "$0")"
@@ -7,24 +12,33 @@ cd "$(dirname "$0")"
 # shellcheck source=/dev/null
 source ./setup_colab.sh
 
-LO="${1:-0}"
-HI="${2:-50000000000}"
-OUT="${3:-loot56_hits.txt}"
+STRUCT_LO="${1:-100000000}"
+STRUCT_HI="${2:-10000000000}"
+REGIONS="${3:-4}"
+THREADS="$(nproc)"
+OUT="brute_out.txt"
+PROGRESS="brute_progress.txt"
 
 echo ""
-echo "=== Building loot56_cuda (T4 / sm_75) ==="
-make ARCH=sm_75 NVCC="$NVCC"
+echo "=== Building desert_pyramid_brute ==="
+make desert_pyramid_brute CUBIOMES="$CUBIOMES"
 
 echo ""
-echo "=== Scan [$LO, $HI) ==="
-./loot56_cuda \
-    --loot-range "$LO" "$HI" \
+echo "=== Brute [${STRUCT_LO}, ${STRUCT_HI}) regions=${REGIONS}x${REGIONS} exact 56 bones ==="
+echo "    threads=$THREADS  out=$OUT"
+./desert_pyramid_brute \
+    --struct-range "$STRUCT_LO" "$STRUCT_HI" \
+    --exact 56 \
+    --regions "$REGIONS" \
+    --sisters 65536 \
+    --threads "$THREADS" \
     --out "$OUT" \
-    --grid-size 16384 \
-    --seeds-per-thread 128
+    --progress-out "$PROGRESS"
 
 echo ""
 if [ -f "$OUT" ]; then
-    echo "=== Hits in $OUT ==="
-    grep -v '^#' "$OUT" | head -20 || true
+    echo "=== Hits (world seeds — playable candidates) ==="
+    grep -v '^#' "$OUT" | head -30 || true
+    HITS=$(grep -vc '^#' "$OUT" || echo 0)
+    echo "Total hit lines: $HITS"
 fi

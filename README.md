@@ -1,196 +1,78 @@
 # loot56-cuda
 
-Standalone GPU scanner for **exact 56-bone, bones-only** desert pyramid chest loot table seeds (Minecraft Java **1.17.1**).
+Colab-friendly bundle of **`desert_pyramid_brute`** — finds **exact 56-bone, bones-only** desert pyramid chests on Minecraft Java **1.17.1** and outputs **playable world seeds** with `/tp` coords.
 
-No cubiomes, no Java, no parent repo required — clone **this folder only** and run on Colab or any Linux machine with NVIDIA CUDA.
+Uses full **cubiomes**: structure placement, loot tables, sister-seed search, and desert biome check. No GPU required.
 
-`setup_colab.sh` **auto-downloads xpple/cubiomes** on first run (loot tables; Cubitect's repo is not enough).
+`setup_colab.sh` auto-downloads [xpple/cubiomes](https://github.com/xpple/cubiomes) on first run (Cubitect's repo has no loot tables).
 
-## Quick start (Colab T4)
+## Quick start (Colab)
 
-**Step 0 — enable GPU** (required): **Runtime → Change runtime type → T4 GPU → Save**
-
-### Option C — structure-first brute (recommended)
-
-**`struct56_cuda`** GPU-scans structure seeds with **fast56**, then **cubiomes CPU verify** (placement + full loot table). Optional **`--mitm`** runs cubiomes sister-seed + desert biome pass.
-
-**Requires cubiomes** — fetched automatically by `setup_colab.sh` on Colab.
-
-```python
-%cd loot56-cuda
-!bash setup_colab.sh
-!bash run_colab_struct.sh
-```
-
-Default range: **160B → 2⁴⁸** (`281474976710656`), region `(0,0)`.
-
-Custom range:
-
-```python
-!bash run_colab_struct.sh 160000000000 281474976710656 0 0
-```
-
-Outputs:
-- `struct56_hits.txt` — **cubiomes-verified** structure hits only
-- `struct56_mitm.txt` — biome-valid **world seeds** (playable candidates)
-
-Chunk across Colab sessions (`--append` on session 2+):
-
-| Session | `--struct-range LO HI` |
-|---------|------------------------|
-| 1 | `160000000000 200000000000` |
-| 2 | `200000000000 240000000000` |
-| 3 | `240000000000 281474976710656` |
-
-```bash
-./struct56_cuda --struct-range 200000000000 240000000000 --region 0 0 --mitm --append
-```
-
-### Option A — link bundled loot hits (loot-first, usually slower path)
-
-`loot56_hits.txt` (13 seeds) is included. One cell:
-
-```python
-# Upload loot56-cuda folder, or clone repo and cd into it:
-# %cd Seed_Finding/loot56-cuda
-
-!bash setup_colab.sh
-!bash run_colab_link.sh
-```
-
-That builds `link56_cuda`, searches structure seeds **20B–80B** across regions **(0,0)–(99,99)**, and writes `link56_hits.txt`.
-
-Download results:
-
-```python
-from google.colab import files
-files.download('link56_hits.txt')
-```
-
-### Option B — loot scan first, then link
+CPU runtime is fine — no T4 needed.
 
 ```python
 %cd loot56-cuda
 !bash run_colab.sh
-!bash run_colab_link.sh loot56_hits.txt 20000000000 80000000000 link56_hits.txt
 ```
 
-`run_colab.sh` / `run_colab_link.sh` install `nvcc` automatically if Colab does not have it on PATH (~2 min, once per session).
+Default chunk: structure seeds **100M → 10B**, regions **4×4**, exact **56 bones**.
 
-### Chunk link across Colab sessions
+Custom range (`STRUCT_LO STRUCT_HI REGIONS`):
 
-Add `--append` on sessions 2+ when continuing structure-seed ranges:
+```python
+!bash run_colab.sh 0 5000000000 4
+!bash run_colab.sh 5000000000 10000000000 4
+```
+
+Download results before the session ends:
+
+```python
+from google.colab import files
+files.download('brute_out.txt')
+files.download('brute_progress.txt')
+```
+
+Each session overwrites `brute_out.txt`. Use a different `--out` path if you run `./desert_pyramid_brute` manually across sessions.
+
+## Chunk across sessions
 
 | Session | Command |
 |---------|---------|
-| 1 | `bash run_colab_link.sh loot56_hits.txt 20000000000 40000000000 link56_hits.txt` |
-| 2 | `./link56_cuda --loot-file loot56_hits.txt --struct-range 40000000000 60000000000 --region-grid 100 --out link56_hits.txt --append --grid-size 16384` |
-| 3 | `./link56_cuda --loot-file loot56_hits.txt --struct-range 60000000000 80000000000 --region-grid 100 --out link56_hits.txt --append --grid-size 16384` |
+| 1 | `bash run_colab.sh 0 5000000000 4` |
+| 2 | `bash run_colab.sh 5000000000 10000000000 4` |
+| 3 | `bash run_colab.sh 10000000000 50000000000 4` |
 
-Manual build:
+Download `brute_out.txt` after each session.
 
-```python
-!bash setup_colab.sh
-!make ARCH=sm_75 link56_cuda
-```
-
-### Troubleshooting `nvcc: No such file or directory`
-
-1. **Switch to GPU runtime** — CPU runtime has no CUDA at all.
-2. Run `!bash setup_colab.sh` before `make` (installs `nvidia-cuda-toolkit`).
-3. Or pass nvcc explicitly: `!make NVCC=/usr/lib/nvidia-cuda-toolkit/bin/nvcc`
-
-## Build
+## Manual build
 
 ```bash
-make              # T4 default (sm_75)
-make ARCH=sm_86   # e.g. A100 / RTX 30xx
+bash setup_colab.sh
+make
+./desert_pyramid_brute --struct-range LO HI --exact 56 --regions 4 --sisters 65536 --threads $(nproc)
 ```
 
-## Run
+Or `make run` for the default range.
 
-```bash
-./loot56_cuda --loot-range LO HI --out hits.txt
-```
+## Output format
 
-T4-tuned (faster):
-
-```bash
-./loot56_cuda --loot-range 0 50000000000 --out hits.txt \
-    --grid-size 16384 --seeds-per-thread 128
-```
-
-Use `--append` when continuing a range across Colab sessions.
-
-## Chunk full 2^48 across sessions
-
-| Session | `--loot-range LO HI` |
-|---------|----------------------|
-| 1 | `0 70368744177664` |
-| 2 | `70368744177664 140737488355328` |
-| 3 | `140737488355328 211106232532992` |
-| 4 | `211106232532992 281474976710656` |
-
-Session 2–4: add `--append`.
-
-## After GPU finds loot seeds
-
-### Phase 2 — GPU link (100×100 regions, Colab)
-
-Searches **structure seeds** across regions **(0,0) through (99,99)** — a 100×100 region area, not 100 total regions.
-
-```bash
-make link56_cuda
-./link56_cuda --loot-file loot56_hits.txt \
-    --struct-range 20000000000 80000000000 \
-    --region-grid 100 \
-    --out link56_hits.txt \
-    --grid-size 16384 --batch-struct-seeds 50000
-```
-
-Or one command on Colab:
-
-```bash
-bash run_colab_link.sh loot56_hits.txt 20000000000 80000000000 link56_hits.txt
-```
-
-Work per run: `(struct_hi - struct_lo) × 100 × 100` (seed, region) pairs.  
-Example: 60B structure seeds × 10,000 regions = **600 trillion** checks — fast on GPU, may take hours on T4.
-
-Output lines look like:
+Hit lines look like:
 
 ```text
-structureSeed=... lootTableSeed=... chest=2 region=(12,34) pos=(...)/tp ...
+worldSeed=... structureSeed=... region=(x,z) chest=... bones=56 /tp ...
 ```
 
-These are **structure matches only** (no biome / playable world seed yet).
+These are real world seeds — ready to test in-game.
 
-### Phase 3 — CPU biome + world seed (your PC)
-
-On your PC (main Seed_Finding repo), run sister-seed + biome pass on GPU link hits:
-
-```powershell
-cd native
-.\build\desert_pyramid_56.exe --link link56_hits.txt --ws-range 0 1000000000 --region 0 0
-```
-
-For each GPU hit region, re-run `--link` with matching `--region RX RZ`, or extend hits to include per-region filtering.
-
-The older single-region CPU link still works for one region at a time:
-
-```powershell
-.\build\desert_pyramid_56.exe --link hits.txt --ws-range 20000000000 80000000000 --region 0 0
-```
+Known **55-bone** playable seed from this tool: `worldSeed=1902153293`, region `(0,3)`, `/tp 160 90 1680`.
 
 ## Standalone git repo
-
-To publish this folder as its own repo:
 
 ```bash
 cd loot56-cuda
 git init
 git add .
-git commit -m "Initial loot56-cuda scanner"
+git commit -m "Colab desert pyramid brute finder"
 git remote add origin <your-github-url>
 git push -u origin main
 ```
@@ -201,14 +83,8 @@ Then on Colab: `!git clone <your-github-url> && %cd loot56-cuda`
 
 | File | Purpose |
 |------|---------|
-| `loot56_cuda.cu` | CUDA loot-table seed scanner |
-| `link56_cuda.cu` | CUDA structure-seed linker (100×100 regions) |
-| `struct56_cuda.cu` | Structure-first 56-bone scanner + MITM |
-| `link56_rng.cuh` | Shared placement + loot RNG + fast56 (device) |
-| `setup_colab.sh` | Find/install nvcc on Colab |
-| `Makefile` | Build targets (`loot56_cuda`, `link56_cuda`, `struct56_cuda`) |
-| `run_colab.sh` | Setup + loot scan |
-| `run_colab_link.sh` | Setup + link pass |
-| `run_colab_struct.sh` | Setup + structure-first scan + MITM |
-| `loot56_hits.txt` | Bundled 13 GPU loot hits (ready for link on Colab) |
+| `desert_pyramid_brute.c` | Trusted CPU world-seed finder (same as `native/`) |
+| `setup_colab.sh` | Fetch cubiomes + build deps (CPU only) |
+| `run_colab.sh` | Build + run brute on Colab |
+| `Makefile` | Build `desert_pyramid_brute` |
 | `colab_cells.py` | Copy-paste Colab snippets |

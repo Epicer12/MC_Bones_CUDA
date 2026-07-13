@@ -4,7 +4,7 @@ Standalone GPU scanner for **exact 56-bone, bones-only** desert pyramid chest lo
 
 No cubiomes, no Java, no parent repo required — clone **this folder only** and run on Colab or any Linux machine with NVIDIA CUDA.
 
-`setup_colab.sh` **auto-downloads cubiomes** on first run (Colab only needs the `loot56-cuda` folder).
+`setup_colab.sh` **auto-downloads xpple/cubiomes** on first run (loot tables; Cubitect's repo is not enough).
 
 ## Quick start (Colab T4)
 

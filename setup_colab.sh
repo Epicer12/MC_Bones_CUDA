@@ -50,19 +50,28 @@ fi
 export NVCC="$NVCC_PATH"
 export PATH="$(dirname "$NVCC"):$PATH"
 
-# cubiomes: auto-fetch on Colab (loot56-cuda-only clone is fine)
+# cubiomes: auto-fetch xpple fork (has desert pyramid loot; Cubitect does not)
 ensure_cubiomes() {
-    if [ -f "../native/cubiomes/finders.h" ]; then
+    if [ -f "../native/cubiomes/loot/items.h" ]; then
         export CUBIOMES="../native/cubiomes"
-    elif [ -f "cubiomes/finders.h" ]; then
+    elif [ -f "cubiomes/loot/items.h" ]; then
         export CUBIOMES="cubiomes"
     else
-        echo "Fetching cubiomes (one-time per Colab session, ~30s)..."
+        # Drop wrong Cubitect clone if present (no loot/)
+        if [ -d "cubiomes" ] && [ ! -f "cubiomes/loot/items.h" ]; then
+            echo "Removing Cubitect cubiomes (no loot)..."
+            rm -rf cubiomes
+        fi
+        echo "Fetching xpple/cubiomes (loot tables; one-time per Colab session)..."
         export DEBIAN_FRONTEND=noninteractive
         apt-get update -qq
         apt-get install -y -qq cmake build-essential git
-        git clone --depth 1 https://github.com/Cubitect/cubiomes.git cubiomes
+        git clone --depth 1 https://github.com/xpple/cubiomes.git cubiomes
         export CUBIOMES="cubiomes"
+    fi
+    if [ ! -f "$CUBIOMES/loot/items.h" ]; then
+        echo "ERROR: $CUBIOMES has no loot/ — need https://github.com/xpple/cubiomes"
+        exit 1
     fi
     echo "CUBIOMES: $CUBIOMES"
 }

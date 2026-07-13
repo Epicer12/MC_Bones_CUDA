@@ -8,24 +8,53 @@ No cubiomes, no Java, no parent repo required — clone **this folder only** and
 
 **Step 0 — enable GPU** (required): **Runtime → Change runtime type → T4 GPU → Save**
 
-Then clone and run:
+### Option A — link bundled loot hits (recommended)
+
+`loot56_hits.txt` (13 seeds) is included. One cell:
 
 ```python
-!git clone <your-repo-url> loot56-cuda
-%cd loot56-cuda
-!bash run_colab.sh
+# Upload loot56-cuda folder, or clone repo and cd into it:
+# %cd Seed_Finding/loot56-cuda
+
+!bash setup_colab.sh
+!bash run_colab_link.sh
 ```
 
-`run_colab.sh` installs `nvcc` automatically if Colab does not have it on PATH (~2 min, once per session).
+That builds `link56_cuda`, searches structure seeds **20B–80B** across regions **(0,0)–(99,99)**, and writes `link56_hits.txt`.
+
+Download results:
+
+```python
+from google.colab import files
+files.download('link56_hits.txt')
+```
+
+### Option B — loot scan first, then link
+
+```python
+%cd loot56-cuda
+!bash run_colab.sh
+!bash run_colab_link.sh loot56_hits.txt 20000000000 80000000000 link56_hits.txt
+```
+
+`run_colab.sh` / `run_colab_link.sh` install `nvcc` automatically if Colab does not have it on PATH (~2 min, once per session).
+
+### Chunk link across Colab sessions
+
+Add `--append` on sessions 2+ when continuing structure-seed ranges:
+
+| Session | Command |
+|---------|---------|
+| 1 | `bash run_colab_link.sh loot56_hits.txt 20000000000 40000000000 link56_hits.txt` |
+| 2 | `./link56_cuda --loot-file loot56_hits.txt --struct-range 40000000000 60000000000 --region-grid 100 --out link56_hits.txt --append --grid-size 16384` |
+| 3 | `./link56_cuda --loot-file loot56_hits.txt --struct-range 60000000000 80000000000 --region-grid 100 --out link56_hits.txt --append --grid-size 16384` |
 
 Manual build:
 
 ```python
 !bash setup_colab.sh
-!make ARCH=sm_75 run-t4
+!make ARCH=sm_75 link56_cuda
 ```
-
-Download `loot56_hits.txt` when done.
 
 ### Troubleshooting `nvcc: No such file or directory`
 
@@ -68,14 +97,52 @@ Session 2–4: add `--append`.
 
 ## After GPU finds loot seeds
 
-On your PC (main Seed_Finding repo):
+### Phase 2 — GPU link (100×100 regions, Colab)
+
+Searches **structure seeds** across regions **(0,0) through (99,99)** — a 100×100 region area, not 100 total regions.
+
+```bash
+make link56_cuda
+./link56_cuda --loot-file loot56_hits.txt \
+    --struct-range 20000000000 80000000000 \
+    --region-grid 100 \
+    --out link56_hits.txt \
+    --grid-size 16384 --batch-struct-seeds 50000
+```
+
+Or one command on Colab:
+
+```bash
+bash run_colab_link.sh loot56_hits.txt 20000000000 80000000000 link56_hits.txt
+```
+
+Work per run: `(struct_hi - struct_lo) × 100 × 100` (seed, region) pairs.  
+Example: 60B structure seeds × 10,000 regions = **600 trillion** checks — fast on GPU, may take hours on T4.
+
+Output lines look like:
+
+```text
+structureSeed=... lootTableSeed=... chest=2 region=(12,34) pos=(...)/tp ...
+```
+
+These are **structure matches only** (no biome / playable world seed yet).
+
+### Phase 3 — CPU biome + world seed (your PC)
+
+On your PC (main Seed_Finding repo), run sister-seed + biome pass on GPU link hits:
 
 ```powershell
 cd native
-.\build\desert_pyramid_56.exe --link hits.txt --world-range 0 1000000000
+.\build\desert_pyramid_56.exe --link link56_hits.txt --ws-range 0 1000000000 --region 0 0
 ```
 
-That links loot table seeds → biome-valid world seeds you can `/tp` to.
+For each GPU hit region, re-run `--link` with matching `--region RX RZ`, or extend hits to include per-region filtering.
+
+The older single-region CPU link still works for one region at a time:
+
+```powershell
+.\build\desert_pyramid_56.exe --link hits.txt --ws-range 20000000000 80000000000 --region 0 0
+```
 
 ## Standalone git repo
 
@@ -96,8 +163,12 @@ Then on Colab: `!git clone <your-github-url> && %cd loot56-cuda`
 
 | File | Purpose |
 |------|---------|
-| `loot56_cuda.cu` | CUDA kernel + CLI |
+| `loot56_cuda.cu` | CUDA loot-table seed scanner |
+| `link56_cuda.cu` | CUDA structure-seed linker (100×100 regions) |
+| `link56_rng.cuh` | Shared placement + loot RNG (device) |
 | `setup_colab.sh` | Find/install nvcc on Colab |
-| `Makefile` | Build targets |
-| `run_colab.sh` | Setup + build + scan |
+| `Makefile` | Build targets (`loot56_cuda`, `link56_cuda`) |
+| `run_colab.sh` | Setup + loot scan |
+| `run_colab_link.sh` | Setup + link pass |
+| `loot56_hits.txt` | Bundled 13 GPU loot hits (ready for link on Colab) |
 | `colab_cells.py` | Copy-paste Colab snippets |

@@ -6,9 +6,9 @@ NVCC ?= nvcc
 ARCH ?= sm_75
 CXXFLAGS ?= -O3
 
-.PHONY: all clean run-small run-t4 check-nvcc
+.PHONY: all clean run-small run-t4 run-link check-nvcc
 
-all: check-nvcc loot56_cuda
+all: check-nvcc loot56_cuda link56_cuda
 
 check-nvcc:
 	@command -v $(NVCC) >/dev/null 2>&1 || { \
@@ -21,8 +21,11 @@ check-nvcc:
 loot56_cuda: loot56_cuda.cu
 	$(NVCC) $(CXXFLAGS) -arch=$(ARCH) -o $@ $<
 
+link56_cuda: link56_cuda.cu link56_rng.cuh
+	$(NVCC) $(CXXFLAGS) -arch=$(ARCH) -o $@ link56_cuda.cu
+
 clean:
-	rm -f loot56_cuda loot56_hits.txt loot56_cuda_hits.txt
+	rm -f loot56_cuda link56_cuda loot56_cuda_hits.txt link56_hits.txt
 
 run-small: loot56_cuda
 	./loot56_cuda --loot-range 0 50000000000 --out loot56_hits.txt
@@ -30,3 +33,9 @@ run-small: loot56_cuda
 run-t4: loot56_cuda
 	./loot56_cuda --loot-range 0 50000000000 --out loot56_hits.txt \
 		--grid-size 16384 --seeds-per-thread 128
+
+run-link: link56_cuda
+	./link56_cuda --loot-file loot56_hits.txt \
+		--struct-range 20000000000 80000000000 \
+		--region-grid 100 --out link56_hits.txt \
+		--grid-size 16384 --batch-struct-seeds 50000

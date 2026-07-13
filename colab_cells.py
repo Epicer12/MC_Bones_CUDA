@@ -5,27 +5,41 @@
 !nvidia-smi
 """
 
-# --- Cell 1: clone + setup nvcc + build + scan ---
+# --- Cell 1: link bundled loot hits (100x100 regions) ---
 """
-!git clone https://github.com/YOUR_USER/loot56-cuda.git
-%cd loot56-cuda
-!bash run_colab.sh
+# Upload loot56-cuda folder, or clone repo and cd into it:
+# %cd Seed_Finding/loot56-cuda
+
+!bash setup_colab.sh
+!bash run_colab_link.sh
 """
 
-# --- Cell 2: download hits ---
+# --- Cell 2: download link hits ---
 """
 from google.colab import files
-files.download('loot56_hits.txt')
+files.download('link56_hits.txt')
 """
+
+# --- Optional: loot scan first, then link ---
+"""
+%cd loot56-cuda
+!bash run_colab.sh
+!bash run_colab_link.sh loot56_hits.txt 20000000000 80000000000 link56_hits.txt
+"""
+
+# --- Chunk link across sessions (add --append on session 2+) ---
+# Session 1: bash run_colab_link.sh loot56_hits.txt 20000000000 40000000000 link56_hits.txt
+# Session 2: ./link56_cuda --loot-file loot56_hits.txt --struct-range 40000000000 60000000000 --region-grid 100 --out link56_hits.txt --append --grid-size 16384
+# Session 3: ./link56_cuda --loot-file loot56_hits.txt --struct-range 60000000000 80000000000 --region-grid 100 --out link56_hits.txt --append --grid-size 16384
 
 # If you already cloned and only need to fix nvcc:
 """
 %cd loot56-cuda
 !bash setup_colab.sh
-!make ARCH=sm_75 run-t4
+!make ARCH=sm_75 link56_cuda
 """
 
-# Full 2^48 in four sessions (use --append on sessions 2-4):
+# Full 2^48 loot scan in four sessions (use --append on sessions 2-4):
 #   0 .. 70368744177664
 #   70368744177664 .. 140737488355328
 #   140737488355328 .. 211106232532992

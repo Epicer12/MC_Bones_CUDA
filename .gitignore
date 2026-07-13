@@ -1,5 +1,6 @@
 loot56_cuda
+link56_cuda
 *.o
-loot56_hits.txt
 loot56_cuda_hits.txt
+link56_hits.txt
 *.txt.bak

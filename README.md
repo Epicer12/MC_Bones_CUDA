@@ -8,7 +8,41 @@ No cubiomes, no Java, no parent repo required — clone **this folder only** and
 
 **Step 0 — enable GPU** (required): **Runtime → Change runtime type → T4 GPU → Save**
 
-### Option A — link bundled loot hits (recommended)
+### Option C — structure-first brute (recommended after link failed)
+
+**`struct56_cuda`** scans structure seeds directly (like `loot56_cuda` speed), places a pyramid in **region (0,0)**, runs **fast56** on all 4 chests, then optional **sister-seed MITM** on CPU.
+
+```python
+%cd loot56-cuda
+!bash setup_colab.sh
+!bash run_colab_struct.sh
+```
+
+Default range: **160B → 2⁴⁸** (`281474976710656`), region `(0,0)`.
+
+Custom range:
+
+```python
+!bash run_colab_struct.sh 160000000000 281474976710656 0 0
+```
+
+Outputs:
+- `struct56_hits.txt` — structureSeed + lootTableSeed + pos
+- `struct56_mitm.txt` — worldSeed candidates (loot re-check only; **biome still needs PC**)
+
+Chunk across Colab sessions (`--append` on session 2+):
+
+| Session | `--struct-range LO HI` |
+|---------|------------------------|
+| 1 | `160000000000 200000000000` |
+| 2 | `200000000000 240000000000` |
+| 3 | `240000000000 281474976710656` |
+
+```bash
+./struct56_cuda --struct-range 200000000000 240000000000 --region 0 0 --mitm --append
+```
+
+### Option A — link bundled loot hits (loot-first, usually slower path)
 
 `loot56_hits.txt` (13 seeds) is included. One cell:
 
@@ -165,10 +199,12 @@ Then on Colab: `!git clone <your-github-url> && %cd loot56-cuda`
 |------|---------|
 | `loot56_cuda.cu` | CUDA loot-table seed scanner |
 | `link56_cuda.cu` | CUDA structure-seed linker (100×100 regions) |
-| `link56_rng.cuh` | Shared placement + loot RNG (device) |
+| `struct56_cuda.cu` | Structure-first 56-bone scanner + MITM |
+| `link56_rng.cuh` | Shared placement + loot RNG + fast56 (device) |
 | `setup_colab.sh` | Find/install nvcc on Colab |
-| `Makefile` | Build targets (`loot56_cuda`, `link56_cuda`) |
+| `Makefile` | Build targets (`loot56_cuda`, `link56_cuda`, `struct56_cuda`) |
 | `run_colab.sh` | Setup + loot scan |
 | `run_colab_link.sh` | Setup + link pass |
+| `run_colab_struct.sh` | Setup + structure-first scan + MITM |
 | `loot56_hits.txt` | Bundled 13 GPU loot hits (ready for link on Colab) |
 | `colab_cells.py` | Copy-paste Colab snippets |

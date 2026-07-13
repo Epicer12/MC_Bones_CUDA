@@ -5,14 +5,21 @@
 !nvidia-smi
 """
 
-# --- Cell 1: link bundled loot hits (100x100 regions) ---
+# --- Cell 1: structure-first scan (region 0,0, 160B..2^48) + MITM ---
 """
-# Upload loot56-cuda folder, or clone repo and cd into it:
-# %cd Seed_Finding/loot56-cuda
-
+%cd loot56-cuda
 !bash setup_colab.sh
-!bash run_colab_link.sh
+!bash run_colab_struct.sh
 """
+
+# --- Cell 2: download struct + mitm hits ---
+"""
+from google.colab import files
+files.download('struct56_hits.txt')
+files.download('struct56_mitm.txt')
+"""
+
+# --- Optional: link bundled loot hits (loot-first path) ---
 
 # --- Cell 2: download link hits ---
 """

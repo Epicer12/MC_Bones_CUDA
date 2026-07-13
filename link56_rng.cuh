@@ -85,4 +85,39 @@ static __device__ __forceinline__ void l56_desert_loot_seeds(
         out[i] = l56_next_long(&s);
 }
 
+/* fast56 filter — exact max 56 bones-only on 1.17.1 desert_pyramid table */
+static __device__ __forceinline__ int l56_fast_rng_56_bones(uint64_t loot_table_seed)
+{
+    const int POOL1_TOTAL = 232;
+    const int POOL1_BONE_MIN = 50;
+    const int POOL1_BONE_MAX = 74;
+    const int POOL2_TOTAL = 50;
+    const int POOL2_BONE_MIN = 0;
+    const int POOL2_BONE_MAX = 9;
+
+    uint64_t s;
+    l56_set_seed(&s, loot_table_seed);
+
+    if (l56_next_int(&s, 3) != 2)
+        return 0;
+
+    for (int i = 0; i < 4; i++) {
+        int w = l56_next_int(&s, POOL1_TOTAL);
+        if (w < POOL1_BONE_MIN || w > POOL1_BONE_MAX)
+            return 0;
+        if (l56_next_int(&s, 3) != 2)
+            return 0;
+    }
+
+    for (int i = 0; i < 4; i++) {
+        int w = l56_next_int(&s, POOL2_TOTAL);
+        if (w < POOL2_BONE_MIN || w > POOL2_BONE_MAX)
+            return 0;
+        if (l56_next_int(&s, 8) != 7)
+            return 0;
+    }
+
+    return 1;
+}
+
 #endif
